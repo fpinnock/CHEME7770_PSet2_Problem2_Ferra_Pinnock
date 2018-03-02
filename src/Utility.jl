@@ -1,3 +1,44 @@
+function show_eigenreaction_profile(eigenreaction_array_column::Array{Float64,1},epsilon::Float64,data_dictionary::Dict{AbstractString,Any})
+
+  # what species coefficients > epsilon?
+  idx_cutoff = find(abs(eigenreaction_array_column).>epsilon)
+
+  # get the list of species -
+  list_of_species_symbols = data_dictionary["list_of_metabolite_symbols"]
+
+  # create my species list -
+  eigenspecies_list = []
+  for species_index in idx_cutoff
+
+      value = list_of_species_symbols[species_index]
+      record = "$(value)"
+      push!(eigenspecies_list,record)
+  end
+
+  return eigenspecies_list
+end
+
+function show_eigenconnectivity_profile(eigenconnection_array_column::Array{Float64,1},epsilon::Float64,data_dictionary::Dict{AbstractString,Any})
+
+  # what species coefficients > epsilon?
+  idx_cutoff = find(abs(eigenconnection_array_column).>epsilon)
+
+  # get the list of species -
+  list_of_reaction_strings = data_dictionary["list_of_reaction_strings"]
+
+  # create my species list -
+  eigenmode_array = []
+  for flux_index in idx_cutoff
+
+    # key,value -
+    key = list_of_reaction_strings[flux_index]
+    record = "$(flux_index),$(key)"
+    push!(eigenmode_array,record)
+  end
+
+  return eigenmode_array
+end
+
 function show_flux_profile(flux_array::Array{Float64,1},epsilon::Float64,data_dictionary::Dict{AbstractString,Any})
 
   # what fluxes are > epsilon?
@@ -21,6 +62,56 @@ function show_flux_profile(flux_array::Array{Float64,1},epsilon::Float64,data_di
   return list_of_flux_records
 end
 
+function find_missing_metabolites_in_atom_dataset(path_to_atom_file::AbstractString,data_dictionary::Dict{AbstractString,Any})
+
+   # how many metabolite symbols do we have in *the model*?
+	list_of_metabolite_symbols_model = data_dictionary["list_of_metabolite_symbols"]
+	number_of_metabolites = length(list_of_metabolite_symbols_model)
+
+  # initialize -
+	atom_names_array = AbstractString[]
+	missing_species_array = AbstractString[]
+	tmp_array::Array{AbstractString} = AbstractString[]
+
+  # load the atom file -
+  try
+
+    open(path_to_atom_file,"r") do model_file
+      for line in eachline(model_file)
+
+          if (contains(line,"//") == false && search(line,"\n")[1] != 1)
+            push!(tmp_array,chomp(line))
+          end
+      end
+    end
+
+    # build atom_names_array
+    for record in tmp_array
+	    @show record
+
+      # split -
+      split_array = split(record,",")
+
+      # get my key -
+      key = split_array[1]  # Metabolite symbol -
+	    @show key
+	     push!(atom_names_array, key)
+    end
+
+  catch err
+    showerror(STDOUT, err, backtrace());println()
+  end
+
+  #ccheck if specise are in atom_names_array
+	for species in list_of_metabolite_symbols_model
+		if(!in(species,atom_names_array))
+			push!(missing_species_array, species)
+		end
+	end
+
+  return missing_species_array
+end
+
 function generate_atom_matrix(path_to_atom_file::AbstractString,data_dictionary::Dict{AbstractString,Any})
 
 
@@ -36,7 +127,7 @@ function generate_atom_matrix(path_to_atom_file::AbstractString,data_dictionary:
   # load the atom file -
   try
 
-    open(path_to_model_file,"r") do model_file
+    open(path_to_atom_file,"r") do model_file
       for line in eachline(model_file)
 
           if (contains(line,"//") == false && search(line,"\n")[1] != 1)
@@ -57,17 +148,16 @@ function generate_atom_matrix(path_to_atom_file::AbstractString,data_dictionary:
 
       # local array -
       local_atom_array = zeros(6)
-      local_atom_array[1] = split_array[2] # C
-      local_atom_array[2] = split_array[3] # H
-      local_atom_array[3] = split_array[4] # N
-      local_atom_array[4] = split_array[5] # O
-      local_atom_array[5] = split_array[6] # P
-      local_atom_array[6] = split_array[7] # S
+      local_atom_array[1] = parse(Float64,split_array[2]) # C
+      local_atom_array[2] = parse(Float64,split_array[3]) # H
+      local_atom_array[3] = parse(Float64,split_array[4]) # N
+      local_atom_array[4] = parse(Float64,split_array[5]) # O
+      local_atom_array[5] = parse(Float64,split_array[6]) # P
+      local_atom_array[6] = parse(Float64,split_array[7]) # S
 
       # store -
       local_dictionary[key] = local_atom_array
     end
-
 
     # ok, so now we have the local dictionary, we can lookup (in order) the metabolites in the model -
     for (index,model_metabolite_symbol) in enumerate(list_of_metabolite_symbols_model)
